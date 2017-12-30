@@ -11,8 +11,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager.LayoutParams;
 import com.liskovsoft.browser.Controller;
-import com.liskovsoft.browser.custom.MainBrowserActivity;
-import com.liskovsoft.browser.custom.SimpleUIController;
+import com.liskovsoft.browser.addons.MainBrowserActivity;
+import com.liskovsoft.browser.addons.SimpleUIController;
 import com.liskovsoft.smartyoutubetv.bootstrap.BootstrapActivity;
 import com.liskovsoft.smartyoutubetv.events.ControllerEventListener;
 import com.liskovsoft.smartyoutubetv.misc.Helpers;
@@ -30,7 +30,8 @@ public class SmartYouTubeTVActivityBase extends MainBrowserActivity {
     private Map<String, String> mHeaders;
     private KeysTranslator mTranslator;
     private final static String DIAL_EXTRA = "com.amazon.extra.DIAL_PARAM";
-    private final String mLGSmartTVUserAgent = "Mozilla/5.0 (Unknown; Linux armv7l) AppleWebKit/537.1+ (KHTML, like Gecko) Safari/537.1+ LG Browser/6.00.00(+mouse+3D+SCREEN+TUNER; LGE; 42LA660S-ZA; 04.25.05; 0x00000001;); LG NetCast.TV-2013 /04.25.05 (LG, 42LA660S-ZA, wired)";
+    private final static String mLGSmartTVUserAgent = "Mozilla/5.0 (Unknown; Linux armv7l) AppleWebKit/537.1+ (KHTML, like Gecko) Safari/537.1+ LG Browser/6.00.00(+mouse+3D+SCREEN+TUNER; LGE; 42LA660S-ZA; 04.25.05; 0x00000001;); LG NetCast.TV-2013 /04.25.05 (LG, 42LA660S-ZA, wired)";
+    private final static String TEMPLATE_URL = "https://www.youtube.com/tv?%s";
 
     @Override
     protected void onCreate(Bundle icicle) {
@@ -71,8 +72,6 @@ public class SmartYouTubeTVActivityBase extends MainBrowserActivity {
 
     private void createController(Bundle icicle) {
         mHeaders = new HashMap<>();
-        //TODO: remove
-        //mPageLoadHandler = new MyPageLoadHandler(this);
         mHeaders.put("user-agent", mLGSmartTVUserAgent);
 
         mController = new SimpleUIController(this);
@@ -201,47 +200,41 @@ public class SmartYouTubeTVActivityBase extends MainBrowserActivity {
             return;
         }
 
-        intent.setData(Uri.parse("https://www.youtube.com/tv?gl=us&hl=en-us&" + dialParam));
+        String uriString = String.format(TEMPLATE_URL, dialParam);
+        intent.setData(Uri.parse(uriString));
     }
 
-    private String runMultiMatcher(String input, String[] patterns) {
-        Pattern regex;
-        Matcher matcher;
-        String result = null;
-        for (String pattern : patterns) {
-            regex = Pattern.compile(pattern);
-            matcher = regex.matcher(input);
-
-            if (matcher.find()) {
-                result = matcher.group(1);
-                break;
-            }
-        }
-
-        return result;
-    }
-
+    /**
+     * Extracts video params e.g. <code>v=xtx33RuFCik</code> from url
+     * <br/>
+     * Examples of the input/output url:
+     * <pre>
+     * origin video: https://www.youtube.com/watch?v=xtx33RuFCik
+     * needed video: https://www.youtube.com/tv#/watch/video/control?v=xtx33RuFCik
+     * needed video: https://www.youtube.com/tv?gl=us&hl=en-us&v=xtx33RuFCik
+     * needed video: https://www.youtube.com/tv?v=xtx33RuFCik
+     *
+     * origin playlist: https://www.youtube.com/playlist?list=PLbl01QFpbBY1XGwNb8SBmoA3hshpK1pZj
+     * needed playlist: https://www.youtube.com/tv#/watch/video/control?list=PLbl01QFpbBY1XGwNb8SBmoA3hshpK1pZj&resume
+     * </pre>
+     * @param url desktop url (see manifest file for the patterns)
+     * @return video params
+     */
     private String extractVideoParamsFromUrl(String url) {
-        // origin video: https://www.youtube.com/watch?v=xtx33RuFCik
-        // needed video: https://www.youtube.com/tv#/watch/video/control?v=xtx33RuFCik
-
-        // origin playlist: https://www.youtube.com/playlist?list=PLbl01QFpbBY1XGwNb8SBmoA3hshpK1pZj
-        // needed playlist: https://www.youtube.com/tv#/watch/video/control?list=PLbl01QFpbBY1XGwNb8SBmoA3hshpK1pZj&resume
-
-        String[] patterns = {"(list=\\w*)", "(v=\\w*)", "/(\\w*)$"};
-        return runMultiMatcher(url, patterns);
+        String[] patterns = {"(list=\\w*)", "(v=\\w*)", "(youtu.be/\\w*)$"};
+        String res = Helpers.runMultiMatcher(url, patterns);
+        return res.replace("youtu.be/", "v=");
     }
 
     private Uri transformUri(final Uri uri) {
         if (uri == null)
             return null;
         String url = uri.toString();
-        String videoId = extractVideoParamsFromUrl(url);
-        if (videoId == null) {
+        String videoParam = extractVideoParamsFromUrl(url);
+        if (videoParam == null) {
             return uri;
         }
-        String videoUrlTemplate = "https://www.youtube.com/tv#/watch/video/control?%s";
-        String format = String.format(videoUrlTemplate, videoId);
+        String format = String.format(TEMPLATE_URL, videoParam);
         return Uri.parse(format);
     }
 
